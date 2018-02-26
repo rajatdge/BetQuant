@@ -60,12 +60,17 @@ def hello():
 @app.route('/',methods = ['GET','POST'])
 def bid():
 
+    teams = []
+    fixtures,teams = get_match_teams()
+    #print "Teams ", teams
+    #print "Fixtures ",fixtures
 
     if request.method == 'POST':
-        name=request.form['name']
+        name=request.form['teams']
+        #print "The team name is : ",name
         email=request.form['email']
         bid=request.form['bet']
-        print name, " ", email, " "
+        #print name, " ", email, " "
 
         response2 = table2.scan(FilterExpression=Attr('email').eq(email))
         item = response2['Items']
@@ -96,16 +101,6 @@ def bid():
                             )
 
 
-                        '''
-                        table2.put_item(
-                                Item={
-                                    "email":email,
-                                    "bid":int(bid),
-                                    "team": name,
-                                    "total_amount":total_amount
-                                }
-                            )
-                        '''
                         flash('Thanks for bidding ' + email)
                         return redirect(url_for('bid'))
                     else:
@@ -119,34 +114,52 @@ def bid():
         else:
             flash("The Bidding is yet to start")
 
-    return render_template('bid.html')
+    return render_template('bid.html',teams=teams,fixtures=fixtures)
 
 def allow_bid():
     current_time = timeoperations.get_current_time_in_unix_utc()
     print "Current time ", current_time
     current_str_date = timeoperations.convert_from_unix_to_str_date_time_utc(current_time)
-    print "current_str_date ", current_str_date
+    #print "current_str_date ", current_str_date
 
     match_date_time = table1.scan(FilterExpression=Attr('date').eq(current_str_date))
-    print "Match date time ", match_date_time
+    #print "Match date time ", match_date_time
     match_details = match_date_time['Items']
-    print "Match item ",match_details
+    #print "Match item ",match_details
 
     if len(match_details) != 0:
         current_match_date_time = match_details[0]['date'] + " " + match_details[0]['time']
-        print "Current match date time ", current_match_date_time
+        #print "Current match date time ", current_match_date_time
         current_match_date_time_unix = timeoperations.convert_str_to_unix_time_utc(current_match_date_time)
-        print "Current match date time in unix ", current_match_date_time_unix
+        #print "Current match date time in unix ", current_match_date_time_unix
 
         bid_start_time = timeoperations.get_six_hours_before_time_utc(current_match_date_time_unix)
+        print "Bid start time : ",bid_start_time
         bid_close_time = timeoperations.get_one_hour_before_time_utc(current_match_date_time_unix)
+        print "Bid close time ",bid_close_time
 
-        if current_time < bid_start_time and current_time > bid_close_time:
+        if current_time > bid_start_time and current_time < bid_close_time:
             return True
         else:
             return False
     else:
         return False
+
+def get_match_teams():
+    fixtures = []
+    match_teams = []
+    current_time = timeoperations.get_current_time_in_unix_utc()
+    current_str_date = timeoperations.convert_from_unix_to_str_date_time_utc(current_time)
+    match_date_time = table1.scan(FilterExpression=Attr('date').eq(current_str_date))
+    team_details = match_date_time['Items']
+
+    if len(team_details) == 0:
+        return match_teams
+    else:
+        fixtures.append("{} vs {} | Starts at 11PM".format(team_details[0]['team1'],team_details[0]['team2']))
+        match_teams.append(team_details[0]['team1'])
+        match_teams.append(team_details[0]['team2'])
+        return fixtures,match_teams
 
 
 if __name__ == "__main__":
