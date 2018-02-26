@@ -60,6 +60,7 @@ def hello():
 @app.route('/',methods = ['GET','POST'])
 def bid():
 
+
     if request.method == 'POST':
         name=request.form['name']
         email=request.form['email']
@@ -68,52 +69,85 @@ def bid():
 
         response2 = table2.scan(FilterExpression=Attr('email').eq(email))
         item = response2['Items']
-        if len(item) != 0:
-            if int(item[0]['total_amount']) < int(bid):
-                print "bid", bid
-                print "The total amount is: {}".format(item[0]['total_amount'])
-                response = "Not eligible to bet"
-                flash('You do not have enough balance ' + email)
-                return redirect(url_for('bid'))
-            else:
-                if(int(item[0]['bid']) == 0):
-                    total_amount = int(item[0]['total_amount']) - int(bid)
-                    print "total amount", total_amount
 
-                    table2.update_item(
-                            Key={
-                                'email': email
-                            },
-                            UpdateExpression="set bid = :r, total_amount=:p, team=:a",
-                            ExpressionAttributeValues={
-                                ':r': int(bid),
-                                ':p': total_amount,
-                                ':a': name
-                            }
-                        )
-
-
-                    '''
-                    table2.put_item(
-                            Item={
-                                "email":email,
-                                "bid":int(bid),
-                                "team": name,
-                                "total_amount":total_amount
-                            }
-                        )
-                    '''
-                    flash('Thanks for bidding ' + email)
+        if allow_bid():
+            if len(item) != 0:
+                if int(item[0]['total_amount']) < int(bid):
+                    print "bid", bid
+                    print "The total amount is: {}".format(item[0]['total_amount'])
+                    response = "Not eligible to bet"
+                    flash('You do not have enough balance ' + email)
                     return redirect(url_for('bid'))
                 else:
-                    flash("You have Bid already")
-                    return redirect(url_for('bid'))
+                    if(int(item[0]['bid']) == 0):
+                        total_amount = int(item[0]['total_amount']) - int(bid)
+                        print "total amount", total_amount
 
+                        table2.update_item(
+                                Key={
+                                    'email': email
+                                },
+                                UpdateExpression="set bid = :r, total_amount=:p, team=:a",
+                                ExpressionAttributeValues={
+                                    ':r': int(bid),
+                                    ':p': total_amount,
+                                    ':a': name
+                                }
+                            )
+
+
+                        '''
+                        table2.put_item(
+                                Item={
+                                    "email":email,
+                                    "bid":int(bid),
+                                    "team": name,
+                                    "total_amount":total_amount
+                                }
+                            )
+                        '''
+                        flash('Thanks for bidding ' + email)
+                        return redirect(url_for('bid'))
+                    else:
+
+                        flash("You have Bid already")
+                        return redirect(url_for('bid'))
+
+            else:
+                flash("Not a registered account")
+                return redirect(url_for('bid'))
         else:
-            flash("Not a registered account")
-            return redirect(url_for('bid'))
+            flash("The Bidding is yet to start")
 
     return render_template('bid.html')
+
+def allow_bid():
+    current_time = timeoperations.get_current_time_in_unix_utc()
+    print "Current time ", current_time
+    current_str_date = timeoperations.convert_from_unix_to_str_date_time_utc(current_time)
+    print "current_str_date ", current_str_date
+
+    match_date_time = table1.scan(FilterExpression=Attr('date').eq(current_str_date))
+    print "Match date time ", match_date_time
+    match_details = match_date_time['Items']
+    print "Match item ",match_details
+
+    if len(match_details) != 0:
+        current_match_date_time = match_details[0]['date'] + " " + match_details[0]['time']
+        print "Current match date time ", current_match_date_time
+        current_match_date_time_unix = timeoperations.convert_str_to_unix_time_utc(current_match_date_time)
+        print "Current match date time in unix ", current_match_date_time_unix
+
+        bid_start_time = timeoperations.get_six_hours_before_time_utc(current_match_date_time_unix)
+        bid_close_time = timeoperations.get_one_hour_before_time_utc(current_match_date_time_unix)
+
+        if current_time < bid_start_time and current_time > bid_close_time:
+            return True
+        else:
+            return False
+    else:
+        return False
+
 
 if __name__ == "__main__":
     app.run()
